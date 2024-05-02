@@ -54,6 +54,12 @@
   - local: chapter5/2
     title: 필요한 데이터셋이 Hub에 없다면 어떻게 할까요?
 
+- title: 7. 주요 NLP 작업들
+  sections:
+  - local: chapter7/6
+    title: 인과적 언어모델을 처음부터 훈련하기
+
+
 - title: 8. 도움을 요청하는 방법
   sections:
   - local: chapter8/1
