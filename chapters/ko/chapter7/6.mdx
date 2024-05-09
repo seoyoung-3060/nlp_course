@@ -1,6 +1,6 @@
 <FrameworkSwitchCourse {fw} />
 
-# Training a causal language model from scratch[[training-a-causal-language-model-from-scratch]]
+# 처음부터 인과 언어 모델을 훈련시키기[[training-a-causal-language-model-from-scratch]]
 
 {#if fw === 'pt'}
 
@@ -22,23 +22,23 @@
 
 {/if}
 
-Up until now, we've mostly been using pretrained models and fine-tuning them for new use cases by reusing the weights from pretraining. As we saw in [Chapter 1](/course/chapter1), this is commonly referred to as _transfer learning_, and it's a very successful strategy for applying Transformer models to most real-world use cases where labeled data is sparse. In this chapter, we'll take a different approach and train a completely new model from scratch. This is a good approach to take if you have a lot of data and it is very different from the pretraining data used for the available models. However, it also requires considerably more compute resources to pretrain a language model than just to fine-tune an existing one. Examples where it can make sense to train a new model include for datasets consisting of musical notes, molecular sequences such as DNA, or programming languages. The latter have recently gained traction thanks to tools such as TabNine and GitHub's Copilot, powered by OpenAI's Codex model, that can generate long sequences of code. This task of text generation is best addressed with auto-regressive or causal language models such as GPT-2.
+지금까지 우리는 주로 사전 훈련된 모델을 사용하고 그들의 가중치를 재사용하여 새로운 사용 사례에 대해 세세한 조정을 해왔습니다. 우리는 [1장](/course/chapter1)에서 본 것처럼 이를 _전이 학습_이라고 일반적으로 부르며, 희소한 라벨이 있는 대부분의 실제 사용 사례에 Transformer 모델을 적용하는 매우 성공적인 전략입니다. 이번 장에서는 다른 접근 방식을 취하여 완전히 새로운 모델을 처음부터 훈련시키겠습니다. 이것은 귀하가 많은 데이터를 가지고 있고 사용 가능한 모델에 사용된 사전 훈련 데이터와 매우 다른 경우에 좋은 접근 방식입니다. 그러나 이것은 사전 훈련된 언어 모델을 단순히 세세히 조정하는 것보다 언어 모델을 사전 훈련하는 데 상당히 더 많은 계산 리소스를 필요로 합니다. 새로운 모델을 훈련시킬 수 있는 예는 음악 노트로 이루어진 데이터 세트, DNA와 같은 분자 서열, 또는 프로그래밍 언어가 있습니다. 후자는 TabNine와 GitHub의 Copilot과 같은 도구들 덕분에 최근에 인기를 얻었습니다. 이들은 OpenAI의 Codex 모델에서 파생된 긴 코드 시퀀스를 생성할 수 있습니다. 이러한 텍스트 생성 작업은 GPT-2와 같은 자기 회귀형 또는 인과 언어 모델로 처리하는 것이 가장 좋습니다.
 
-In this section we will build a scaled-down version of a code generation model: we'll focus on one-line completions instead of full functions or classes, using a subset of Python code. When working with data in Python you are in frequent contact with the Python data science stack, consisting of the `matplotlib`, `seaborn`, `pandas`, and `scikit-learn` libraries. When using those frameworks it's common to need to look up specific commands, so it would be nice if we could use a model to complete these calls for us.
+이 섹션에서는 코드 생성 모델의 축소판을 만들 것입니다: 우리는 Python 코드의 일줄 완성에 초점을 맞출 것이며, 전체 함수나 클래스 대신 Python 코드의 하위 집합을 사용할 것입니다. Python 데이터를 다룰 때 주로 `matplotlib`, `seaborn`, `pandas`, `scikit-learn` 라이브러리로 이루어진 Python 데이터 과학 스택과 자주 상호 작용하게 됩니다. 이러한 프레임워크를 사용할 때 특정 명령을 찾아야 할 때가 많기 때문에 이러한 호출을 자동으로 완성하는 모델을 사용할 수 있다면 좋을 것입니다.
 
 <Youtube id="Vpjb1lu0MDk"/>
 
-In [Chapter 6](/course/chapter6) we created an efficient tokenizer to process Python source code, but what we still need is a large-scale dataset to pretrain a model on. Here, we'll apply our tokenizer to a corpus of Python code derived from GitHub repositories. We will then use the `Trainer` API and 🤗 Accelerate to train the model. Let's get to it!
+[6장](/course/chapter6)에서 우리는 Python 소스 코드를 처리하기 위한 효율적인 토크나이저를 생성했지만, 여전히 모델을 사전 훈련할 대규모 데이터 세트가 필요합니다. 여기서 우리는 GitHub 리포지토리에서 파생된 Python 코드 코퍼스에 우리의 토크나이저를 적용할 것입니다. 그런 다음 `Trainer` API와 🤗 가속기를 사용하여 모델을 훈련할 것입니다. 시작해봅시다!
 
 <iframe src="https://course-demos-codeparrot-ds.hf.space" frameBorder="0" height="300" title="Gradio app" class="block dark:hidden container p-0 flex-grow space-iframe" allow="accelerometer; ambient-light-sensor; autoplay; battery; camera; document-domain; encrypted-media; fullscreen; geolocation; gyroscope; layout-animations; legacy-image-formats; magnetometer; microphone; midi; oversized-images; payment; picture-in-picture; publickey-credentials-get; sync-xhr; usb; vr ; wake-lock; xr-spatial-tracking" sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"></iframe>
 
-This is actually showcasing the model that was trained and uploaded to the Hub using the code shown in this section. You can find it [here](https://huggingface.co/huggingface-course/codeparrot-ds?text=plt.imshow%28). Note that since there is some randomization happening in the text generation, you will probably get a slightly different result.
+이것은 실제로 이 섹션에서 보여진 코드를 사용하여 훈련하고 Hub에 업로드된 모델을 전시하는 것입니다. 여기서 찾을 수 있습니다 [here](https://huggingface.co/huggingface-course/codeparrot-ds?text=plt.imshow%28). 텍스트 생성에 약간의 무작위성이 발생하기 때문에 결과가 약간 다를 수 있습니다.
  
-## Gathering the data[[gathering-the-data]]
+## 데이터 수집[[gathering-the-data]]
 
-Python code is abundantly available from code repositories such as GitHub, which we can use to create a dataset by scraping for every Python repository. This was the approach taken in the [Transformers textbook](https://learning.oreilly.com/library/view/natural-language-processing/9781098136789/) to pretrain a large GPT-2 model. Using a GitHub dump of about 180 GB containing roughly 20 million Python files called `codeparrot`, the authors built a dataset that they then shared on the [Hugging Face Hub](https://huggingface.co/datasets/transformersbook/codeparrot).
+Python 코드는 GitHub와 같은 코드 리포지토리에서 풍부하게 사용할 수 있으며, 우리는 모든 Python 리포지토리를 스크랩하여 데이터 세트를 생성할 수 있습니다. 이것은 [Transformers textbook](https://learning.oreilly.com/library/view/natural-language-processing/9781098136789/)에서 대규모 GPT-2 모델을 사전 훈련하기 위해 취한 접근 방식입니다. 약 180GB 크기의 GitHub 덤프인 `codeparrot`이라는 약 2000만 개의 Python 파일이 들어있는 데이터 세트를 사용하여 저자들은 데이터 세트를 구축한 후 이를 [Hugging Face Hub](https://huggingface.co/datasets/transformersbook/codeparrot)에 공유했습니다.
 
-However, training on the full corpus is time- and compute-consuming, and we only need the subset of the dataset concerned with the Python data science stack. So, let's start by filtering the `codeparrot` dataset for all files that include any of the libraries in this stack. Because of the dataset's size, we want to avoid downloading it; instead, we'll use the streaming feature to filter it on the fly. To help us filter the code samples using the libraries we mentioned earlier, we'll use the following function:
+그러나 전체 코퍼스에서 훈련하는 것은 시간과 컴퓨팅 리소스가 많이 소모되므로 Python 데이터 과학 스택에 관련된 데이터 세트의 하위 집합만 필요합니다. 그러므로 먼저 `codeparrot` 데이터 세트를 필터링하여 이 스택에 관련된 모든 파일을 가져와야 합니다. 데이터 세트의 크기 때문에 다운로드하는 것을 피해야 하기 때문에 이를 스트리밍 기능을 사용하여 실시간으로 필터링할 것입니다. 앞에서 언급한 라이브러리를 사용하여 코드 샘플을 필터링하는 데 도움을 주기 위해 다음 함수를 사용할 것입니다:
 
 ```py
 def any_keyword_in_string(string, keywords):
@@ -48,7 +48,7 @@ def any_keyword_in_string(string, keywords):
     return False
 ```
 
-Let's test it on two examples:
+두 가지 예제에서 이것을 테스트할 수 있습니다:
 
 ```py
 filters = ["pandas", "sklearn", "matplotlib", "seaborn"]
@@ -64,7 +64,7 @@ print(
 False True
 ```
 
-We can use this to create a function that will stream the dataset and filter the elements we want:
+이 함수를 사용하여 스트리밍 데이터 세트를 만들고 우리가 원하는 요소를 필터링할 수 있는 함수를 만들 수 있습니다:
 
 ```py
 from collections import defaultdict
@@ -84,11 +84,11 @@ def filter_streaming_dataset(dataset, filters):
     return Dataset.from_dict(filtered_dict)
 ```
 
-Then we can simply apply this function to the streaming dataset:
+그런 다음 이 함수를 단순히 스트리밍 데이터 세트에 적용할 수 있습니다:
+
 
 ```py
-# This cell will take a very long time to execute, so you should skip it and go to
-# the next one!
+# 이 셀을 실행하는 데 매우 오랜 시간이 걸리므로 이를 건너뛰고 다음으로 넘어가는 것이 좋습니다!
 from datasets import load_dataset
 
 split = "train"  # "valid"
@@ -101,10 +101,9 @@ filtered_data = filter_streaming_dataset(data, filters)
 ```python out
 3.26% of data after filtering.
 ```
+이렇게 하면 원래 데이터 세트의 약 3%만 남게 됩니다. 이것은 여전히 상당히 큰 데이터 세트입니다. 결과 데이터 세트는 6GB이고 60만 개의 Python 스크립트로 구성됩니다!
 
-This leaves us with about 3% of the original dataset, which is still quite sizable -- the resulting dataset is 6 GB and consists of 600,000 Python scripts!
-
-Filtering the full dataset can take 2-3h depending on your machine and bandwidth. If you don't want to go through this lengthy process yourself, we provide the filtered dataset on the Hub for you to download:
+전체 데이터 세트를 필터링하는 데는 사용하는 기계 및 대역폭에 따라 2~3시간이 소요될 수 있습니다. 이러한 긴 과정을 직접 수행하지 않으려는 경우 필터링된 데이터 세트를 다운로드할 수 있도록 Hub에서 제공합니다:
 
 ```py
 from datasets import load_dataset, DatasetDict
@@ -137,11 +136,11 @@ DatasetDict({
 
 <Tip>
 
-Pretraining the language model will take a while. We suggest that you first run the training loop on a sample of the data by uncommenting the two partial lines above, and make sure that the training successfully completes and the models are stored. Nothing is more frustrating than a training run failing at the last step because you forgot to create a folder or because there's a typo at the end of the training loop!
+언어 모델을 사전 훈련하는 데 시간이 걸릴 것입니다. 먼저 위의 두 부분 라인의 주석을 해제하여 데이터의 샘플에서 훈련 루프를 실행하고 훈련이 성공적으로 완료되고 모델이 저장되는지 확인하십시오. 훈련 루프의 끝에 폴더를 만들거나 오타가 있어서 마지막 단계에서 훈련 실행이 실패하는 것보다 더 좋습니다!
 
 </Tip>
 
-Let's look at an example from the dataset. We'll just show the first 200 characters of each field:
+데이터 세트의 예제를 살펴보겠습니다. 각 필드의 처음 200자만 표시하겠습니다:
 
 ```py
 for key in raw_datasets["train"][0]:
@@ -167,22 +166,22 @@ from .murmurhash import murm
 LICENSE: bsd-3-clause'''
 ```
 
-We can see that the `content` field contains the code that we want our model to train on. Now that we have a dataset, we need to prepare the texts so they're in a format suitable for pretraining.
+`content` 필드가 우리의 모델이 훈련할 코드를 포함하고 있음을 볼 수 있습니다. 이제 데이터 세트가 있으므로 사전 훈련에 적합한 형식으로 텍스트를 준비해야 합니다.
 
-## Preparing the dataset[[preparing-the-dataset]]
+## 데이터 세트 준비하기[[preparing-the-dataset]]
 
 <Youtube id="ma1TrR7gE7I"/>
 
-The first step will be to tokenize the data, so we can use it for training. Since our goal is to mainly autocomplete short function calls, we can keep the context size relatively small. This has the benefit that we can train the model much faster and it requires significantly less memory. If it is important for your application to have more context (for example, if you want the model to write unit tests based on a file with the function definition), make sure you increase that number, but also keep in mind that this comes with a greater GPU memory footprint. For now, let's fix the context size at 128 tokens, as opposed to the 1,024 or 2,048 used in GPT-2 or GPT-3, respectively.
+첫 번째 단계는 데이터를 토큰화하여 훈련에 사용할 수 있도록하는 것입니다. 주로 짧은 함수 호출을 자동으로 완성하기 위한 것이므로 컨텍스트 크기를 상대적으로 작게 유지할 것입니다. 이것은 모델을 훨씬 더 빠르게 훈련할 수 있게 하고 메모리를 훨씬 적게 필요로 합니다. 어플리케이션에서 더 많은 컨텍스트를 갖는 것이 중요하다면(예를 들어, 파일의 함수 정의를 기반으로 모델이 단위 테스트를 작성하도록 하려면), 해당 숫자를 증가시키되 이는 더 많은 GPU 메모리를 사용한다는 것을 염두에 두세요. 지금은 컨텍스트 크기를 128 토큰으로 고정하겠습니다. 이는 GPT-2나 GPT-3에서 사용되는 1,024 또는 2,048과는 달리 상대적으로 작습니다.
 
-Most documents contain many more than 128 tokens, so simply truncating the inputs to the maximum length would eliminate a large fraction of our dataset. Instead, we'll use the `return_overflowing_tokens` option to tokenize the whole input and split it into several chunks, as we did in [Chapter 6](/course/chapter6/4). We'll also use the `return_length` option to return the length of each created chunk automatically. Often the last chunk will be smaller than the context size, and we'll get rid of these pieces to avoid padding issues; we don't really need them as we have plenty of data anyway.
+대부분의 문서는 128개 이상의 토큰을 포함하므로 최대 길이로 입력을 자르면 데이터 세트의 많은 부분이 사라집니다. 대신 `return_overflowing_tokens` 옵션을 사용하여 전체 입력을 토큰화하고 여러 청크로 나눌 수 있습니다. 우리는 [6장](/course/chapter6/4)에서 했던 것처럼 이것을 할 것입니다. 또한 `return_length` 옵션을 사용하여 자동으로 생성된 각 청크의 길이를 반환할 것입니다. 마지막 청크는 일반적으로 컨텍스트 크기보다 작을 것이므로 패딩 문제를 피하기 위해 이러한 조각들을 제거합니다. 우리가 이미 충분한 데이터를 가지고 있기 때문에 이러한 조각들은 실제로 필요하지 않습니다.
 
 <div class="flex justify-center">
 <img class="block dark:hidden" src="https://huggingface.co/datasets/huggingface-course/documentation-images/resolve/main/en/chapter7/chunking_texts.svg" alt="Chunking a large texts in several pieces."/>
 <img class="hidden dark:block" src="https://huggingface.co/datasets/huggingface-course/documentation-images/resolve/main/en/chapter7/chunking_texts-dark.svg" alt="Chunking a large texts in several pieces."/>
 </div>
 
-Let's see exactly how this works by looking at the first two examples:
+이 작업이 어떻게 작동하는지를 정확히 살펴보겠습니다. 처음 두 예제를 살펴보면 다음과 같습니다:
 
 ```py
 from transformers import AutoTokenizer
@@ -209,9 +208,9 @@ Input chunk lengths: [128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128
 Chunk mapping: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ```
 
-We can see that we get 34 segments in total from those two examples. Looking at the chunk lengths, we can see that the chunks at the ends of both documents have less than 128 tokens (117 and 41, respectively). These represent just a small fraction of the total chunks that we have, so we can safely throw them away. With the `overflow_to_sample_mapping` field, we can also reconstruct which chunks belonged to which input samples.
+이렇게 하면 우리는 두 예제에서 총 34개의 세그먼트를 얻게 됩니다. 청크의 길이를 살펴보면, 두 문서 모두 끝에 있는 청크가 128토큰 미만임을 알 수 있습니다(각각 117과 41). 이들은 우리가 가진 총 청크 중에 작은 일부를 나타냅니다. 따라서 이를 안전하게 버릴 수 있습니다. `overflow_to_sample_mapping` 필드를 사용하여 어떤 청크가 어떤 입력 샘플에 속하는지도 재구성할 수 있습니다.
 
-With this operation we're using a handy feature of the `Dataset.map()` function in 🤗 Datasets, which is that it does not require one-to-one maps; as we saw in [section 3](/course/chapter7/3), we can create batches with more or fewer elements than the input batch. This is useful when doing operations like data augmentation or data filtering that change the number of elements. In our case, when tokenizing each element into chunks of the specified context size, we create many samples from each document. We just need to make sure to delete the existing columns, since they have a conflicting size. If we wanted to keep them, we could repeat them appropriately and return them within the `Dataset.map()` call:
+이 작업을 수행하는 데에는 🤗 데이터셋의 `Dataset.map()` 함수의 유용한 기능을 활용하고 있습니다. 이 함수는 일대일 매핑을 요구하지 않으며, 하나의 입력 배치보다 더 많거나 더 적은 요소를 포함하는 배치를 생성할 수 있습니다. 데이터 증강 또는 데이터 필터링과 같은 작업을 수행할 때 유용합니다. 우리의 경우에는 각 요소를 지정된 문맥 크기의 청크로 토큰화할 때마다 각 문서에서 많은 샘플을 생성합니다. 다만, 기존 열을 삭제해야 하므로 크기가 충돌하는 것에 유의해야 합니다. 이를 유지하려면 해당 열을 적절히 반복하고 `Dataset.map()` 호출 내에서 반환하면 됩니다.
 
 ```py
 def tokenize(element):
@@ -248,20 +247,20 @@ DatasetDict({
 })
 ```
 
-We now have 16.7 million examples with 128 tokens each, which corresponds to about 2.1 billion tokens in total. For reference, OpenAI's GPT-3 and Codex models are trained on 300 and 100 billion tokens, respectively, where the Codex models are initialized from the GPT-3 checkpoints. Our goal in this section is not to compete with these models, which can generate long, coherent texts, but to create a scaled-down version providing a quick autocomplete function for data scientists.
+이제 각각 128 토큰씩 1,670만 개의 예제가 있으며, 총 21억 토큰에 해당합니다. 참고로 OpenAI의 GPT-3와 Codex 모델은 각각 300억과 1000억 토큰에 대해 훈련되었으며, Codex 모델은 GPT-3 체크포인트에서 초기화되었습니다. 이 섹션의 목표는 이러한 모델과 경쟁하는 것이 아니라 데이터 과학자를 위한 빠른 자동 완성 기능을 제공하는 축소판을 만드는 것입니다.
 
-Now that we have the dataset ready, let's set up the model!
+데이터 세트가 준비되었으므로 이제 모델을 설정해 봅시다!
 
 <Tip>
 
-✏️ **Try it out!** Getting rid of all the chunks that are smaller than the context size wasn't a big issue here because we're using small context windows. As you increase the context size (or if you have a corpus of short documents), the fraction of chunks that are thrown away will also grow. A more efficient way to prepare the data is to join all the tokenized samples in a batch with an `eos_token_id` token in between, and then perform the chunking on the concatenated sequences. As an exercise, modify the `tokenize()` function to make use of that approach. Note that you'll want to set `truncation=False` and remove the other arguments from the tokenizer to get the full sequence of token IDs.
+✏️ **해보세요!** 여기서는 작은 컨텍스트 창을 사용하므로 컨텍스트 크기보다 작은 모든 청크를 제거하는 것이 큰 문제가 되지 않았습니다. 컨텍스트 크기를 늘리면(또는 짧은 문서의 말뭉치를 사용하는 경우) 버려진 청크의 비율도 늘어납니다. 데이터를 준비하는 더 효율적인 방법은 모든 토큰화된 샘플을 `eos_token_id` 토큰 사이에 결합한 다음 연결된 시퀀스에서 청크를 생성하는 것입니다. 연습으로 `tokenize()` 함수를 수정하여 해당 방법을 사용하십시오. 토큰화에서 `truncation=False`를 설정하고 다른 인수를 토크나이저에서 제거해야 전체 토큰 ID 시퀀스를 얻을 수 있습니다.
 
 </Tip>
 
 
-## Initializing a new model[[initializing-a-new-model]]
+## 새 모델 초기화[[initializing-a-new-model]]
 
-Our first step is to freshly initialize a GPT-2 model. We'll use the same configuration for our model as for the small GPT-2 model, so we load the pretrained configuration, make sure that the tokenizer size matches the model vocabulary size and pass the `bos` and `eos` (beginning and end of sequence) token IDs:
+첫 번째 단계는 새로운 GPT-2 모델을 초기화하는 것입니다. 우리는 모델의 크기를 GPT-2 작은 모델과 같게 하기 위해 우리 모델에 대한 동일한 구성을 사용할 것입니다. 따라서 사전 훈련된 구성을 로드하고 토크나이저 크기가 모델 어휘 크기와 일치하도록하고 `bos`와 `eos`(시퀀스의 시작과 끝) 토큰 ID를 전달할 것입니다:
 
 {#if fw === 'pt'}
 
@@ -277,7 +276,7 @@ config = AutoConfig.from_pretrained(
 )
 ```
 
-With that configuration, we can load a new model. Note that this is the first time we don't use the `from_pretrained()` function, since we're actually initializing a model ourself:
+이 구성을 사용하여 새 모델을 로드할 수 있습니다. 이것은 우리가 실제로 모델을 초기화하기 때문에 `from_pretrained()` 함수를 사용하지 않는 첫 번째 경우입니다:
 
 ```py
 model = GPT2LMHeadModel(config)
@@ -303,7 +302,7 @@ config = AutoConfig.from_pretrained(
 )
 ```
 
-With that configuration, we can load a new model. Note that this is the first time we don't use the `from_pretrained()` function, since we're actually initializing a model ourself:
+그런 다음이 구성을 사용하여 새 모델을 로드할 수 있습니다. 이것은 실제로 우리가 모델을 초기화하기 때문에 우리가 `from_pretrained()` 함수를 사용하지 않는 첫 번째 경우입니다:
 
 ```py
 model = TFGPT2LMHeadModel(config)
@@ -325,9 +324,9 @@ _________________________________________________________________
 
 {/if}
 
-Our model has 124M parameters that we'll have to tune. Before we can start training, we need to set up a data collator that will take care of creating the batches. We can use the `DataCollatorForLanguageModeling` collator, which is designed specifically for language modeling (as the name subtly suggests). Besides stacking and padding batches, it also takes care of creating the language model labels -- in causal language modeling the inputs serve as labels too (just shifted by one element), and this data collator creates them on the fly during training so we don't need to duplicate the `input_ids`.
+우리 모델은 조정해야 할 124M개의 매개변수를 갖고 있습니다. 훈련을 시작하기 전에 배치를 생성하는 데이터 콜레이터를 설정해야합니다. 특히 언어 모델링에 특화된 `DataCollatorForLanguageModeling` 콜레이터를 사용할 수 있습니다(이름에서 약간 암시됩니다). 배치를 쌓고 패딩하는 것 외에도 이 콜레이터는 언어 모델 레이블을 생성하는데 사용됩니다. 인과 언어 모델링에서 입력은 레이블 역할을 하기도 합니다(하나의 요소만 시프트된 것). 이 데이터 콜레이터는 훈련 중에 레이블을 생성하여 `input_ids`를 중복하여 생성할 필요가 없도록합니다.
 
-Note that `DataCollatorForLanguageModeling` supports both masked language modeling (MLM) and causal language modeling (CLM). By default it prepares data for MLM, but we can switch to CLM by setting the argument `mlm=False`:
+`DataCollatorForLanguageModeling`은 마스크 언어 모델링(MLM) 및 인과 언어 모델링(CLM)을 모두 지원합니다. 기본적으로 이 콜레이터는 MLM을 위해 데이터를 준비하지만 `mlm=False` 인수를 설정하여 CLM으로 전환할 수 있습니다:
 
 {#if fw === 'pt'}
 
@@ -349,7 +348,7 @@ data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, return_ten
 
 {/if}
 
-Let's have a look at an example:
+예제를 살펴보겠습니다:
 
 ```py
 out = data_collator([tokenized_datasets["train"][i] for i in range(5)])
@@ -375,11 +374,11 @@ labels shape: (5, 128)
 
 {/if}
 
-We can see that the examples have been stacked and all the tensors have the same shape.
+예제가 쌓여 있고 모든 텐서가 동일한 모양을 가지고 있는 것을 볼 수 있습니다.
 
 {#if fw === 'tf'}
 
-Now we can use the `prepare_tf_dataset()` method to convert our datasets to TensorFlow datasets with the data collator we created above:
+이제 `prepare_tf_dataset()` 메서드를 사용하여 데이터 세트를 TensorFlow 데이터 세트로 변환할 수 있습니다. 위에서 생성한 데이터 콜레이터와 함께:
 
 ```python
 tf_train_dataset = model.prepare_tf_dataset(
@@ -400,12 +399,12 @@ tf_eval_dataset = model.prepare_tf_dataset(
 
 <Tip warning={true}>
 
-⚠️ Shifting the inputs and labels to align them happens inside the model, so the data collator just copies the inputs to create the labels.
+⚠️ 입력과 레이블을 정렬하여 맞추는 것은 모델 내부에서 발생하므로 데이터 콜레이터는 레이블을 생성하기 위해 입력을 단순히 복사합니다.
 
 </Tip>
 
 
-Now we have everything in place to actually train our model -- that wasn't so much work after all! Before we start training we should log in to Hugging Face. If you're working in a notebook, you can do so with the following utility function:
+이제 우리는 모델을 실제로 훈련할 모든 준비를 마쳤습니다. 이제 훈련을 시작하기 전에 Hugging Face에 로그인해야 합니다. 노트북에서 작업 중이라면 다음 유틸리티 함수를 사용하여 로그인할 수 있습니다:
 
 ```python
 from huggingface_hub import notebook_login
@@ -413,9 +412,9 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-This will display a widget where you can enter your Hugging Face login credentials.
+이것은 Hugging Face 로그인 자격 증명을 입력할 수 있는 위젯을 표시합니다.
 
-If you aren't working in a notebook, just type the following line in your terminal:
+노트북에서 작업하지 않는 경우 터미널에서 다음 줄을 입력하면됩니다:
 
 ```bash
 huggingface-cli login
@@ -423,7 +422,7 @@ huggingface-cli login
 
 {#if fw === 'pt'}
 
-All that's left to do is configure the training arguments and fire up the `Trainer`. We'll use a cosine learning rate schedule with some warmup and an effective batch size of 256 (`per_device_train_batch_size` * `gradient_accumulation_steps`). Gradient accumulation is used when a single batch does not fit into memory, and incrementally builds up the gradient through several forward/backward passes. We'll see this in action when we create the training loop with 🤗 Accelerate.
+나머지 작업은 훈련 인수를 구성하고 `Trainer`를 실행하는 것뿐입니다. 코사인 학습률 스케줄과 일부 웜업, 그리고 효과적인 배치 크기인 256(`per_device_train_batch_size` * `gradient_accumulation_steps`)를 사용할 것입니다. 그라디언트 누적은 단일 배치가 메모리에 맞지 않을 때 사용되며 여러 전방향/후방향 패스를 통해 점진적으로 그라디언트를 누적합니다. 이것을 🤗 Accelerate와 함께 훈련 루프를 만들 때 볼 것입니다.
 
 ```py
 from transformers import Trainer, TrainingArguments
@@ -456,13 +455,13 @@ trainer = Trainer(
 )
 ```
 
-Now we can just start the `Trainer` and wait for training to finish. Depending on whether you run it on the full or a subset of the training set this will take 20 or 2 hours, respectively, so grab a few coffees and a good book to read!
+이제 `Trainer`를 시작하고 훈련이 완료될 때까지 기다리면 됩니다. 훈련 세트의 전체 또는 일부에 실행하는지에 따라 시간이 달라집니다. 전체 데이터셋에 대해 실행하는 경우 20시간이 걸릴 수 있으며, 일부 데이터셋에 대해 실행하는 경우 2시간이 걸릴 수 있습니다. 따라서 여유 있게 몇 잔의 커피를 마시고 좋은 책을 읽으면 됩니다!
 
 ```py
 trainer.train()
 ```
 
-After training completes, we can push the model and tokenizer to the Hub:
+훈련이 완료되면 모델과 토크나이저를 Hub에 업로드할 수 있습니다.
 
 ```py
 trainer.push_to_hub()
@@ -470,7 +469,7 @@ trainer.push_to_hub()
 
 {:else}
 
-All that's left to do is configure the training hyperparameters and call `compile()` and `fit()`. We'll use a learning rate schedule with some warmup to improve the stability of training:
+나머지 할 일은 훈련 하이퍼파라미터를 구성하고 `compile()` 및 `fit()`을 호출하는 것뿐입니다. 훈련의 안정성을 높이기 위해 일정을 사용할 것입니다.
 
 ```py
 from transformers import create_optimizer
@@ -489,7 +488,7 @@ model.compile(optimizer=optimizer)
 tf.keras.mixed_precision.set_global_policy("mixed_float16")
 ```
 
-Now we can just call `model.fit()` and wait for training to finish. Depending on whether you run it on the full or a subset of the training set this will take 20 or 2 hours, respectively, so grab a few coffees and a good book to read! After training completes we can push the model and tokenizer to the Hub:
+이제 `model.fit()`을 호출하고 훈련이 완료될 때까지 기다리면 됩니다. 전체 데이터셋 또는 일부 데이터셋에서 실행하느냐에 따라 훈련에 걸리는 시간이 달라집니다. 전체 데이터셋으로 실행하는 경우 20시간이 걸릴 수 있으니, 좋은 책과 커피를 준비하세요! 훈련이 완료되면 모델과 토크나이저를 Hub에 업로드할 수 있습니다.
 
 ```py
 from transformers.keras_callbacks import PushToHubCallback
@@ -498,12 +497,9 @@ callback = PushToHubCallback(output_dir="codeparrot-ds", tokenizer=tokenizer)
 
 model.fit(tf_train_dataset, validation_data=tf_eval_dataset, callbacks=[callback])
 ```
-
-{/if}
-
 <Tip>
 
-✏️ **Try it out!** It only took us about 30 lines of code in addition to the `TrainingArguments` to get from raw texts to training GPT-2. Try it out with your own dataset and see if you can get good results! 
+✏️ **해보세요!** `TrainingArguments`에 몇 줄의 코드만 추가하면 원시 텍스트에서 GPT-2를 학습시킬 수 있습니다. 여러분의 데이터셋으로 시도해보고 얼마나 좋은 결과를 얻을 수 있는지 확인해보세요!
 
 </Tip>
 
@@ -511,19 +507,19 @@ model.fit(tf_train_dataset, validation_data=tf_eval_dataset, callbacks=[callback
 
 {#if fw === 'pt'}
 
-💡 If you have access to a machine with multiple GPUs, try to run the code there. The `Trainer` automatically manages multiple machines, and this can speed up training tremendously.
+💡 여러분의 머신에 다중 GPU가 있는 경우 코드를 실행해보세요. `Trainer`는 자동으로 여러 머신을 관리하며, 이렇게 하면 학습 속도가 크게 향상될 수 있습니다.
 
 {:else}
 
-💡 If you have access to a machine with multiple GPUs, you can try using a `MirroredStrategy` context to substantially speed up training. You'll need to create a `tf.distribute.MirroredStrategy` object, and make sure that any `to_tf_dataset()` or `prepare_tf_dataset()` methods as well as model creation and the call to `fit()` are all run in its `scope()` context. You can see documentation on this [here](https://www.tensorflow.org/guide/distributed_training#use_tfdistributestrategy_with_keras_modelfit).
+💡 여러분의 머신에 다중 GPU가 있는 경우 `MirroredStrategy` 컨텍스트를 사용하여 학습 속도를 상당히 높일 수 있습니다. `tf.distribute.MirroredStrategy` 객체를 만들고, `to_tf_dataset()` 또는 `prepare_tf_dataset()` 메서드 및 모델 생성 및 `fit()` 호출이 모두 해당 `scope()` 컨텍스트 내에서 실행되도록 해야 합니다. 자세한 내용은 [여기](https://www.tensorflow.org/guide/distributed_training#use_tfdistributestrategy_with_keras_modelfit)에서 확인할 수 있습니다.
 
 {/if}
 
 </Tip>
 
-## Code generation with a pipeline[[code-generation-with-a-pipeline]]
+## 파이프라인을 사용한 코드 생성[[code-generation-with-a-pipeline]]
 
-Now is the moment of truth: let's see how well the trained model actually works! We can see in the logs that the loss went down steadily, but to put the model to the test let's take a look at how well it works on some prompts. To do that we'll wrap the model in a text generation `pipeline`, and we'll put it on the GPU for fast generations if there is one available:
+이제가 모델의 실제 작동 여부를 확인하는 순간입니다! 로그에서 손실이 꾸준히 감소했음을 볼 수 있지만, 모델을 테스트하려면 몇 가지 프롬프트에서 얼마나 잘 작동하는지 살펴보겠습니다. 이를 위해 모델을 텍스트 생성 `파이프라인`으로 래핑하고, GPU가 있는 경우 빠른 생성을 위해 GPU에 넣겠습니다:
 
 {#if fw === 'pt'}
 
@@ -551,7 +547,7 @@ pipe = pipeline(
 
 {/if}
 
-Let's start with the simple task of creating a scatter plot:
+간단한 산점도를 만드는 간단한 작업으로 시작해보겠습니다:
 
 ```py
 txt = """\
@@ -575,7 +571,7 @@ plt.scatter(x, y)
 # create scatter
 ```
 
-The result looks correct. Does it also work for a `pandas` operation? Let's see if we can create a `DataFrame` from two arrays:
+결과가 올바르게 보입니다. `pandas` 작업에도 작동하는지 확인해보겠습니다. 두 배열에서 `DataFrame`을 만들 수 있는지 살펴보겠습니다:
 
 ```py
 txt = """\
@@ -599,7 +595,7 @@ df.insert(0,'x', x)
 for
 ```
 
-Nice, that's the correct answer -- although it then inserts the column `x` again. Since the number of generated tokens is limited, the following `for` loop is cut off. Let's see if we can do something a bit more complex and have the model help us use the `groupby` operation: 
+좋습니다. 올바른 답변입니다. 그러나 그럼에도 불구하고 열 `x`를 다시 삽입합니다. 생성된 토큰 수가 제한되어 있으므로 다음 `for` 루프가 잘려 나갑니다. 더 복잡한 작업을 수행하고 모델이 `groupby` 작업을 도와주는지 확인해보겠습니다:
 
 ```py
 txt = """\
@@ -621,7 +617,7 @@ profession = df.groupby(['profession']).mean()
 # compute the
 ```
 
-Not bad; that's the right way to do it. Finally, let's see if we can also use it for `scikit-learn` and set up a Random Forest model:
+꽤 괜찮습니다. 이렇게 하면 올바른 방법입니다. 마지막으로 `scikit-learn`을 사용하여 랜덤 포레스트 모델을 설정할 수 있는지 확인해보겠습니다:
 
 ```py
 txt = """
@@ -645,23 +641,23 @@ rf
 
 {#if fw === 'tf'}
 
-Looking at these few examples, it seems that the model has learned some of the syntax of the Python data science stack. Of course, we would need to evaluate the model more thoroughly before deploying it in the real world, but this is still an impressive prototype.
+이러한 몇 가지 예를 살펴보면 모델이 Python 데이터 과학 스택의 일부 구문을 학습한 것으로 보입니다. 물론 실제 세계에 배포하기 전에 모델을 더 철저하게 평가해야 하지만, 이는 여전히 인상적인 프로토타입입니다.
 
 {:else}
 
-Looking at these few examples, it seems that the model has learned some of the syntax of the Python data science stack (of course, we would need to evaluate it more thoroughly before deploying the model in the real world). Sometimes it requires more customization of the model training to achieve the necessary performance for a given use case, however. For example, what if we would like to dynamically update the batch size or have a conditional training loop that skips bad examples on the fly? One option would be to subclass the `Trainer` and add the necessary changes, but sometimes it's simpler to write the training loop from scratch. That's where 🤗 Accelerate comes in.
+이러한 몇 가지 예를 살펴보면 모델이 Python 데이터 과학 스택의 일부 구문을 학습한 것으로 보입니다(물론, 실제 세계에서 모델을 배포하기 전에 더 철저히 평가해야 합니다). 때로는 주어진 사용 사례에 필요한 성능을 달성하기 위해 모델 학습을 더 많이 사용자 정의해야 할 수 있습니다. 예를 들어 배치 크기를 동적으로 업데이트하거나 조건부 학습 루프를 사용하여 나쁜 예제를 실시간으로 건너뛰는 경우 어떻게 해야 할까요? `Trainer`를 서브 클래스화하고 필요한 변경 사항을 추가하는 것이 한 가지 옵션일 수 있지만, 때로는 학습 루프를 처음부터 작성하는 것이 더 간단할 수 있습니다. 여기서 🤗 Accelerate가 필요합니다.
 
 {/if}
 
 {#if fw === 'pt'}
 
-## Training with 🤗 Accelerate[[training-with-accelerate]]
+## 🤗 Accelerate로 학습[[training-with-accelerate]]
 
-We've seen how to train a model with the `Trainer`, which can allow for some customization. However, sometimes we want full control over the training loop, or we want to make some exotic changes. In this case 🤗 Accelerate is a great choice, and in this section we'll go through the steps to use it to train our model. To make things more interesting, we'll also add a twist to the training loop.
+`Trainer`를 사용하여 모델을 학습하는 방법을 살펴보았습니다. 이를 통해 약간의 사용자 정의가 가능합니다. 그러나 때로는 학습 루프를 완전히 제어하거나 어떤 독특한 변경 사항을 만들고 싶을 수 있습니다. 이러한 경우 🤗 Accelerate가 좋은 선택이며, 이 섹션에서는 이를 사용하여 모델을 학습하는 단계를 살펴보겠습니다. 좀 더 흥미로운 점은 학습 루프에 추가로 변형을 추가할 것입니다.
 
 <Youtube id="Hm8_PgVTFuc"/>
 
-Since we are mainly interested in sensible autocompletion for the the data science libraries, it makes sense to give more weight to training samples that make more use of these libraries. We can easily identify these examples through the use of keywords such as `plt`, `pd`, `sk`, `fit`, and `predict`, which are the most frequent import names for `matplotlib.pyplot`, `pandas`, and `sklearn` as well as the fit/predict pattern of the latter. If these are each represented as a single token, we can easily check if they occur in the input sequence. Tokens can have a whitespace prefix, so we'll also check for those versions in the tokenizer vocabulary. To verify that it works, we'll add one test token which should be split into multiple tokens:
+주로 데이터 과학 라이브러리에 대한 합리적인 자동 완성을 원하기 때문에, 이러한 라이브러리를 더 많이 활용하는 학습 샘플에 더 많은 가중치를 부여하는 것이 합리적입니다. 우리는 `plt`, `pd`, `sk`, `fit` 및 `predict`와 같은 키워드를 통해 이러한 예제를 쉽게 식별할 수 있습니다. 이것들은 각각 `matplotlib.pyplot`, `pandas`, `sklearn`의 가장 빈번한 import 이름 및 후자의 fit/predict 패턴입니다. 이들을 하나의 토큰으로 표현한다면 입력 시퀀스에 나타나는지 쉽게 확인할 수 있습니다. 토큰에는 공백 접두사가 있을 수 있으므로 토크나이저 어휘에서 해당 버전도 확인해야 합니다. 이것이 작동하는지 확인하기 위해 여러 토큰을 테스트합니다. 이 중 하나는 여러 토큰으로 분할되어야 합니다:
 
 ```py
 keytoken_ids = []
@@ -689,7 +685,7 @@ for keyword in [
 'Keyword has not single token: testtest'
 ```
 
-Great, that seems to work nicely! We can now write a custom loss function that takes the input sequence, the logits, and the key tokens we just selected as inputs. First we need to align the logits and inputs: the input sequence shifted by one to the right forms the labels, since the next token is the label for the current token. We can achieve this by starting the labels from the second token of the input sequence, since the model does not make a prediction for the first token anyway. Then we cut off the last logit, as we don't have a label for the token that follows the full input sequence. With that we can compute the loss per sample and count the occurrences of all keywords in each sample. Finally, we calculate the weighted average over all samples using the occurrences as weights. Since we don't want to throw away all the samples that have no keywords, we add 1 to the weights:
+정상적으로 작동하는 것 같습니다! 이제 입력 시퀀스, 로짓 및 방금 선택한 키 토큰을 사용하는 사용자 정의 손실 함수를 작성할 수 있습니다. 먼저 로짓 및 입력을 정렬해야 합니다. 입력 시퀀스를 오른쪽으로 한 칸 이동하면 라벨이 형성되므로, 라벨은 현재 토큰의 다음 토큰입니다. 이것은 입력 시퀀스의 두 번째 토큰부터 시작하여 라벨을 형성합니다. 모델은 첫 번째 토큰에 대한 예측을 하지 않으므로 그 전체 입력 시퀀스에 대한 라벨이 필요하지 않습니다. 그런 다음 마지막 로짓을 잘라내어 사용하지 않습니다. 이를 통해 각 샘플당 손실을 계산하고 각 샘플에서 모든 키워드의 발생을 계산할 수 있습니다. 마지막으로, 발생을 가중치로 사용하여 모든 샘플에 대한 가중 평균을 계산합니다. 키워드가 없는 모든 샘플을 버리고 싶지 않으므로 가중치에 1을 추가합니다:
 
 ```py
 from torch.nn import CrossEntropyLoss
@@ -701,7 +697,7 @@ def keytoken_weighted_loss(inputs, logits, keytoken_ids, alpha=1.0):
     shift_labels = inputs[..., 1:].contiguous()
     shift_logits = logits[..., :-1, :].contiguous()
     # Calculate per-token loss
-    loss_fct = CrossEntropyLoss(reduce=False)
+    loss_fct = CrossEntropyLoss(reduction='none')
     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
     # Resize and average loss per sample
     loss_per_sample = loss.view(shift_logits.size(0), shift_logits.size(1)).mean(axis=1)
@@ -715,13 +711,13 @@ def keytoken_weighted_loss(inputs, logits, keytoken_ids, alpha=1.0):
     return weighted_loss
 ```
 
-Before we can start training with this awesome new loss function, we need to prepare a few things:
+이 멋진 새로운 손실 함수로 학습을 시작하기 전에 마지막으로 몇 가지를 준비해야 합니다:
 
-- We need dataloaders to load the data in batches.
-- We need to set up weight decay parameters.
-- From time to time we want to evaluate, so it makes sense to wrap the evaluation code in a function.
+- 데이터로더를 만들어 배치 단위로 데이터를 로드해야 합니다.
+- 가중치 감쇠 매개변수를 설정해야 합니다.
+- 때때로 평가하고 싶으므로 평가 코드를 함수로 래핑하는 것이 좋습니다.
 
-Let's start with the dataloaders. We only need to set the dataset's format to `"torch"`, and then we can pass it to a PyTorch `DataLoader` with the appropriate batch size:
+먼저 데이터로더를 준비합시다. 데이터셋의 형식을 `"torch"`로 설정하고, 적절한 배치 크기로 PyTorch `DataLoader`에 전달하면 됩니다:
 
 ```py
 from torch.utils.data.dataloader import DataLoader
@@ -731,7 +727,7 @@ train_dataloader = DataLoader(tokenized_dataset["train"], batch_size=32, shuffle
 eval_dataloader = DataLoader(tokenized_dataset["valid"], batch_size=32)
 ```
 
-Next, we group the parameters so that the optimizer knows which ones will get an additional weight decay. Usually, all bias and LayerNorm weights terms are exempt from this; here's how we can do this:
+다음으로 매개변수를 그룹화하여 옵티마이저가 추가 가중치 감쇠를 받을 매개변수를 알 수 있도록 해야 합니다. 보통 모든 편향 및 LayerNorm 가중치 용어는 이에 해당하지 않습니다. 다음은 이를 수행하는 방법입니다:
 
 ```py
 weight_decay = 0.1
@@ -750,7 +746,7 @@ def get_grouped_params(model, no_decay=["bias", "LayerNorm.weight"]):
     ]
 ```
 
-Since we want to evaluate the model regularly on the validation set during training, let's write a function for that as well. It just runs through the evaluation dataloader and gathers all the losses across processes:
+모델을 정의했으므로 평가를 위한 코드를 함수로 작성하는 것이 좋습니다. 이 함수는 간단히 평가 데이터 로더를 통해 모델을 실행하고, 모든 프로세스에서 손실을 수집합니다:
 
 ```py
 def evaluate():
@@ -769,13 +765,13 @@ def evaluate():
     return loss.item(), perplexity.item()
 ```
 
-With the `evaluate()` function we can report loss and [perplexity](/course/chapter7/3) at regular intervals. Next, we redefine our model to make sure we train from scratch again:
+`evaluate()` 함수를 사용하여 일정한 간격으로 손실과 [perplexity](/course/chapter7/3)를 보고할 수 있습니다. 다음으로 모델을 다시 정의하여 처음부터 다시 학습합니다:
 
 ```py
 model = GPT2LMHeadModel(config)
 ```
 
-We can then define our optimizer, using the function from before to split the parameters for weight decay:
+그런 다음 매개변수를 그룹화하고 옵티마이저를 정의합니다. 이전과 마찬가지로 매개변수를 가중치 감쇠에 따라 분리하는 함수를 사용합니다:
 
 ```py
 from torch.optim import AdamW
@@ -783,7 +779,7 @@ from torch.optim import AdamW
 optimizer = AdamW(get_grouped_params(model), lr=5e-4)
 ```
 
-Now let's prepare the model, optimizer, and dataloaders so we can start training:
+이제 모델, 옵티마이저 및 데이터로더를 준비하여 학습을 시작할 준비가 되었습니다:
 
 ```py
 from accelerate import Accelerator
@@ -797,11 +793,11 @@ model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
 
 <Tip>
 
-🚨 If you're training on a TPU, you'll need to move all the code starting at the cell above into a dedicated training function. See [Chapter 3](/course/chapter3) for more details.
+🚨 TPU에서 학습 중인 경우, 여기서부터의 모든 코드를 전용 학습 함수로 이동해야 합니다. 자세한 내용은 [Chapter 3](/course/chapter3)을 참조하세요.
 
 </Tip>
 
-Now that we have sent our `train_dataloader` to `accelerator.prepare()`, we can use its length to compute the number of training steps. Remember that we should always do this after preparing the dataloader, as that method will change its length. We use a classic linear schedule from the learning rate to 0:
+이제 `train_dataloader`를 `accelerator.prepare()`에 전송했으므로 학습 단계 수를 계산할 수 있습니다. 항상 데이터 로더를 준비한 후에 이렇게 해야 합니다. 데이터 로더를 준비하는 것이 메서드를 변경하기 때문입니다. 우리는 학습률부터 0까지의 클래식한 선형 일정을 사용합니다:
 
 ```py
 from transformers import get_scheduler
@@ -814,11 +810,13 @@ lr_scheduler = get_scheduler(
     name="linear",
     optimizer=optimizer,
     num_warmup_steps=1_000,
-    num_training_steps=num_training_steps,
+    num_training_steps
+
+=num_training_steps,
 )
 ```
 
-Lastly, to push our model to the Hub, we will need to create a `Repository` object in a working folder. First log in to the Hugging Face Hub, if you aren't logged in already. We'll determine the repository name from the model ID we want to give our model (feel free to replace the `repo_name` with your own choice; it just needs to contain your username, which is what the function `get_full_repo_name()` does):
+마지막으로, 모델을 Hub에 업로드하려면 작업 폴더에서 `Repository` 객체를 만들어야 합니다. 이미 로그인되어 있지 않은 경우 Hugging Face Hub에 로그인하세요. 모델 ID에서 리포지토리 이름을 결정할 것입니다(자유롭게 `repo_name`을 원하는 대로 바꾸십시오. 이것은 사용자 이름을 포함해야 하므로 함수 `get_full_repo_name()`이 하는 것입니다):
 
 ```py
 from huggingface_hub import Repository, get_full_repo_name
@@ -832,16 +830,16 @@ repo_name
 'sgugger/codeparrot-ds-accelerate'
 ```
 
-Then we can clone that repository in a local folder. If it already exists, this local folder should be an existing clone of the repository we are working with:
+그런 다음 해당 리포지토리를 로컬 폴더에 복제할 수 있습니다. 이미 존재하는 경우, 해당 로컬 폴더는 우리가 작업하는 리포지토리의 기존 복제본이어야 합니다:
 
 ```py
 output_dir = "codeparrot-ds-accelerate"
 repo = Repository(output_dir, clone_from=repo_name)
 ```
 
-We can now upload anything we save in `output_dir` by calling the `repo.push_to_hub()` method. This will help us upload the intermediate models at the end of each epoch.
+`repo.push_to_hub()` 메서드를 호출하여 `output_dir`에 저장된 모든 것을 업로드할 수 있습니다. 이렇게 하면 각 에포크의 중간 모델을 업로드하는 데 도움이 됩니다.
 
-Before we train, let's run a quick test to see if the evaluation function works properly:
+학습하기 전에, 평가 함수가 올바르게 작동하는지 빠르게 테스트해 봅시다:
 
 ```py
 evaluate()
@@ -851,7 +849,7 @@ evaluate()
 (10.934126853942871, 56057.14453125)
 ```
 
-Those are very high values for loss and perplexity, but that's not surprising as we haven't trained the model yet. With that, we have everything prepared to write the core part of the training script: the training loop. In the training loop we iterate over the dataloader and pass the batches to the model. With the logits, we can then evaluate our custom loss function. We scale the loss by the number of gradient accumulation steps so as not to create larger losses when aggregating more steps. Before we optimize, we also clip the gradients for better convergence. Finally, every few steps we evaluate the model on the evaluation set with our new `evaluate()` function:
+손실과 퍼플렉서티에 대한 이 값은 매우 높지만, 모델을 아직 학습하지 않았으므로 놀랍지는 않습니다. 이제 학습 스크립트의 핵심 부분인 학습 루프를 작성할 준비가 되었습니다. 학습 루프에서는 데이터 로더를 반복하고 배치를 모델에 전달합니다. 로짓을 사용하여 사용자 정의 손실 함수를 평가할 수 있습니다. 손실을 적절한 급격한 축소로 스케일링하여 더 많은 단계를 집계할 때 더 큰 손실을 만들지 않습니다. 최적화하기 전에 그라디언트를 클리핑하여 수렴을 개선합니다. 마지막으로, 일정한 간격으로 새로운 `evaluate()` 함수를 사용하여 평가 세트에서 모델을 평가합니다:
 
 ```py
 from tqdm.notebook import tqdm
@@ -897,17 +895,17 @@ for epoch in range(num_train_epochs):
                 )
 ```
 
-And that's it -- you now have your own custom training loop for causal language models such as GPT-2 that you can further customize to your needs. 
+이것으로 모든 준비가 끝났습니다. 이제 GPT-2와 같은 인과 언어 모델에 대한 사용자 정의 학습 루프를 직접 작성하여 원하는 대로 사용자 정의할 수 있습니다.
 
 <Tip>
 
-✏️ **Try it out!** Either create your own custom loss function tailored to your use case, or add another custom step into the training loop.
+✏️ **해보기!** 사용자 정의 손실 함수를 작성하여 사용 사례에 맞게 맞춤화하거나, 학습 루프에 다른 사용자 정의 단계를 추가해 보세요.
 
 </Tip>
 
 <Tip>
 
-✏️ **Try it out!** When running long training experiments it's a good idea to log important metrics using tools such as TensorBoard or Weights & Biases. Add proper logging to the training loop so you can always check how the training is going.
+✏️ **해보기!** 긴 학습 실험을 실행할 때는 TensorBoard 또는 Weights & Biases와 같은 도구를 사용하여 중요한 메트릭을 로그하는 것이 좋습니다. 학습 루프에 적절한 로깅을 추가하여 항상 학습 상태를 확인할 수 있습니다.
 
 </Tip>
 
